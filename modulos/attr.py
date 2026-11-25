@@ -46,6 +46,16 @@ def attr_python(g, vivas=None):
     return attr(componentes_clave(g, np.ones(len(g.ids), bool) if vivas is None else vivas))
 
 
+def puentes(g):
+    vivas = np.ones(len(g.ids), bool)
+    puente = np.zeros(len(g.ids), bool)
+    for k in range(len(g.ids)):
+        vivas[k] = False
+        puente[k] = attr_python(g, vivas) < 1
+        vivas[k] = True
+    return puente
+
+
 def montecarlo(g, p, n_iter=config.MC_ITERACIONES, semilla=config.MC_SEMILLA):
     rng = np.random.default_rng(semilla)
     i, j = np.triu_indices(len(g.clave), 1)

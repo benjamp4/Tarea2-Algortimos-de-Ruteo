@@ -22,11 +22,14 @@ def redondear(x):
     return x
 
 
-def simulacion_representativa(g, p, objetivo, intentos=500):
+def simulacion_representativa(g, p, intentos=500):
     rng = np.random.default_rng(config.MC_SEMILLA + 1)
     muestras = [rng.random(len(p)) >= p for _ in range(intentos)]
-    mejor = min(muestras, key=lambda vivas: abs(attr.attr_python(g, vivas) - objetivo))
-    return set(g.ids[~mejor])
+    valores = np.array([round(attr.attr_python(g, vivas), 6) for vivas in muestras])
+    estados, veces = np.unique(valores[valores < 1], return_counts=True)
+    moda = estados[veces.argmax()]
+    elegida = muestras[int(np.argmax(valores == moda))]
+    return set(g.ids[~elegida]), moda, veces.max(), intentos
 
 
 def main():
@@ -56,6 +59,8 @@ def main():
     g = attr.cargar_grafo()
     attr_antes = attr.attr_sql()
     print(f"pgRouting: {attr_antes:.4f} | Python: {attr.attr_python(g):.4f}")
+    puente = attr.puentes(g)
+    print(f"Enlaces puente (su caída sola separa nodos clave): {puente.sum()}")
 
     titulo("5. Modelo de falla y main.sql")
     df, modelo = modelo_falla.calcular()
@@ -75,6 +80,9 @@ def main():
               f"mediana = {r['attr_p50']:.4f}  P(ATTR=1) = {r['prob_attr_1']:.3f}")
     attr_det = attr.attr_sql("p_falla < 0.5")
     print(f"determinista (sin tramos p >= 0.5): {attr_det:.4f}")
+    p_puente = {e: 1 - np.prod(1 - p[col].to_numpy()[puente]) for e, col in [("epicentro", "p_falla"), ("ruptura", "p_falla_ruptura")]}
+    print(f"P(cae algún enlace puente): epicentro {p_puente['epicentro']:.3f} | ruptura {p_puente['ruptura']:.3f} | "
+          f"puente más cercano al epicentro: {p.dist_epicentro_km.to_numpy()[puente].min():.0f} km")
     print(pares["epicentro"].sort_values("p_conectados").head(10).to_string(index=False))
 
     salida = {
@@ -82,13 +90,16 @@ def main():
         "attr_despues_epicentro": resultados["epicentro"],
         "attr_despues_ruptura": resultados["ruptura"],
         "attr_determinista_p_lt_0_5": attr_det,
+        "enlaces_puente": {"cantidad": int(puente.sum()), "p_cae_alguno": p_puente},
         "tramos_esperados_caidos": {"epicentro": df.p_falla.sum(), "ruptura": df.p_falla_ruptura.sum()},
         "modelo": modelo,
     }
     (config.DIR_SALIDA / "resultados.json").write_text(json.dumps(redondear(salida), indent=2, ensure_ascii=False))
 
     titulo("7. Mapa Leaflet")
-    caidos = simulacion_representativa(g, p.p_falla.to_numpy(), resultados["epicentro"]["attr_medio"])
+    caidos, attr_sim, veces, intentos = simulacion_representativa(g, p.p_falla.to_numpy())
+    print(f"Simulación del mapa (estado de daño más frecuente, {veces} de {intentos}): "
+          f"{len(caidos)} enlaces caídos, ATTR = {attr_sim:.4f}")
     ruta = mapa.generar_mapa(attr_antes, resultados["epicentro"], resultados["ruptura"], pares["epicentro"], caidos)
     print(f"Archivo: {ruta}")
 
