@@ -1,0 +1,11 @@
+geopandas>=1.0
+pyogrio>=0.9
+shapely>=2.0
+pandas>=2.0
+numpy>=1.26
+scipy>=1.11
+sqlalchemy>=2.0
+geoalchemy2>=0.15
+psycopg2-binary>=2.9
+folium>=0.17
+branca>=0.7
